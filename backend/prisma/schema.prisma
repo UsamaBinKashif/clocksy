@@ -1,0 +1,169 @@
+// Clocksy data model. Self-hosted PostgreSQL via Prisma.
+// `User` holds both authentication (email + password hash) and profile fields.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  employee
+  admin
+}
+
+enum SessionStatus {
+  active
+  paused
+  ended
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  displayName  String   @default("") @map("display_name")
+  avatarUrl    String?  @map("avatar_url")
+  role         UserRole @default(employee)
+  teamId       String?  @map("team_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  team         Team?         @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  sessions     Session[]
+  activityLogs ActivityLog[]
+  screenshots  Screenshot[]
+
+  @@index([teamId])
+  @@index([role])
+  @@map("users")
+}
+
+model Team {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Screenshot capture settings (read by the desktop app at session start).
+  screenshotsEnabled       Boolean @default(true) @map("screenshots_enabled")
+  screenshotMinIntervalSec Int     @default(600) @map("screenshot_min_interval_sec")
+  screenshotMaxIntervalSec Int     @default(900) @map("screenshot_max_interval_sec")
+
+  members  User[]
+  sessions Session[]
+  clients  Client[]
+  projects Project[]
+  apiKeys  ApiKey[]
+
+  @@map("teams")
+}
+
+model Client {
+  id        String   @id @default(uuid()) @db.Uuid
+  teamId    String   @map("team_id") @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  team     Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  projects Project[]
+
+  @@index([teamId])
+  @@map("clients")
+}
+
+model Project {
+  id        String   @id @default(uuid()) @db.Uuid
+  teamId    String   @map("team_id") @db.Uuid
+  clientId  String?  @map("client_id") @db.Uuid
+  name      String
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  team     Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  client   Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  sessions Session[]
+
+  @@index([teamId])
+  @@index([clientId])
+  @@map("projects")
+}
+
+model ApiKey {
+  id         String    @id @default(uuid()) @db.Uuid
+  teamId     String    @map("team_id") @db.Uuid
+  name       String
+  prefix     String
+  hashedKey  String    @unique @map("hashed_key")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz(6)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@map("api_keys")
+}
+
+model Session {
+  id            String        @id @default(uuid()) @db.Uuid
+  userId        String        @map("user_id") @db.Uuid
+  teamId        String?       @map("team_id") @db.Uuid
+  projectId     String?       @map("project_id") @db.Uuid
+  startedAt     DateTime      @default(now()) @map("started_at") @db.Timestamptz(6)
+  endedAt       DateTime?     @map("ended_at") @db.Timestamptz(6)
+  pausedSeconds Int           @default(0) @map("paused_seconds")
+  status        SessionStatus @default(active)
+  clientAt      DateTime?     @map("client_at") @db.Timestamptz(6)
+  receivedAt    DateTime      @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team         Team?         @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  activityLogs ActivityLog[]
+  screenshots  Screenshot[]
+
+  @@index([userId])
+  @@index([teamId])
+  @@index([projectId])
+  @@index([status])
+  @@map("sessions")
+}
+
+model ActivityLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  sessionId     String   @map("session_id") @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  bucketStart   DateTime @map("bucket_start") @db.Timestamptz(6)
+  keyboardCount Int      @default(0) @map("keyboard_count")
+  mouseCount    Int      @default(0) @map("mouse_count")
+  isIdle        Boolean  @default(false) @map("is_idle")
+  clientAt      DateTime? @map("client_at") @db.Timestamptz(6)
+  receivedAt    DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([userId])
+  @@index([bucketStart])
+  @@map("activity_logs")
+}
+
+model Screenshot {
+  id              String   @id @default(uuid()) @db.Uuid
+  sessionId       String   @map("session_id") @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  takenAt         DateTime @map("taken_at") @db.Timestamptz(6)
+  storagePath     String   @map("storage_path")
+  activityPercent Decimal  @default(0) @map("activity_percent") @db.Decimal
+  receivedAt      DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([userId])
+  @@map("screenshots")
+}

@@ -1,0 +1,108 @@
+@import '@fontsource-variable/inter';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+@import '@fontsource/jetbrains-mono/600.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Clocksy desktop tokens — mirrors the dashboard "Forge"-structured palette.
+ * The tracker window is even more restrained: the only visible brand accent is
+ * the Start button / active-session ring. Everything else stays neutral.
+ */
+:root {
+  --background: #fafaf8;
+  --surface: #f4f2ee;
+  --surface-elevated: #ffffff;
+  --surface-sunken: #ebe8e2;
+
+  --border: #e4e1db;
+  --border-subtle: #efece6;
+
+  --text-primary: #1c1a17;
+  --text-secondary: #6b6762;
+  --text-muted: #a8a49e;
+  --text-inverse: #ffffff;
+  --text-link: #c2691f;
+
+  --nav-active: #e7e3dc;
+
+  --accent-yellow: #f5ed30;
+  --accent-yellow-fg: #1c1a17;
+  --accent-orange: #fe934e;
+  --accent-orange-fg: #ffffff;
+
+  --status-active: #16a34a;
+  --status-active-bg: #dcfce7;
+  --status-idle: #d97706;
+  --status-idle-bg: #fef3c7;
+  --status-offline: #9ca3af;
+  --status-offline-bg: #f1f0ec;
+  --status-error: #dc2626;
+  --status-error-bg: #fee2e2;
+
+  --fn-loader-accent: var(--accent-orange);
+  --ring: var(--accent-orange);
+}
+
+.dark {
+  --background: #17150f;
+  --surface: #201d16;
+  --surface-elevated: #242019;
+  --surface-sunken: #14120d;
+
+  --border: #33302a;
+  --border-subtle: #2a2721;
+
+  --text-primary: #f6f3ec;
+  --text-secondary: #b3ada2;
+  --text-muted: #837d73;
+  --text-inverse: #17150f;
+  --text-link: #f0a463;
+
+  --nav-active: #33302a;
+
+  --accent-yellow: #f5ed30;
+  --accent-yellow-fg: #1c1a17;
+  --accent-orange: #fe934e;
+  --accent-orange-fg: #241a10;
+
+  --status-active: #4ade80;
+  --status-active-bg: #14321f;
+  --status-idle: #fbbf24;
+  --status-idle-bg: #3a2c0f;
+  --status-offline: #9ca3af;
+  --status-offline-bg: #26231d;
+  --status-error: #f87171;
+  --status-error-bg: #3a1a1a;
+
+  --fn-loader-accent: var(--accent-orange);
+  --ring: var(--accent-orange);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  margin: 0;
+  background-color: var(--background);
+  color: var(--text-primary);
+  font-family: 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+@keyframes fn-loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

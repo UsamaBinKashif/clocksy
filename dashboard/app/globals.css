@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Clocksy design tokens — "Forge"-structured, warm-neutral identity.
+ * Light + dark are equally intentional. Brand accents (yellow/orange) are
+ * isolated to intentional CTAs, links, progress, and active indicators —
+ * never used to tint chrome, cards, rows, or sidebars.
+ */
+:root {
+  /* Surfaces — quiet warm canvas, denser chrome, elevated cards */
+  --background: #fafaf8;
+  --surface: #f4f2ee;
+  --surface-elevated: #ffffff;
+  --surface-sunken: #ebe8e2;
+
+  /* Borders — uniform hairlines on all sides */
+  --border: #e4e1db;
+  --border-subtle: #efece6;
+
+  /* Text */
+  --text-primary: #1c1a17;
+  --text-secondary: #6b6762;
+  --text-muted: #a8a49e;
+  --text-inverse: #ffffff;
+  --text-link: #c2691f;
+
+  /* Nav — full pill on active, no accent bar */
+  --nav-active: #e7e3dc;
+
+  /* Brand accents (isolated) */
+  --accent-yellow: #f5ed30;
+  --accent-yellow-fg: #1c1a17;
+  --accent-orange: #fe934e;
+  --accent-orange-fg: #ffffff;
+
+  /* Semantic status + tints */
+  --status-active: #16a34a;
+  --status-active-bg: #dcfce7;
+  --status-idle: #d97706;
+  --status-idle-bg: #fef3c7;
+  --status-offline: #9ca3af;
+  --status-offline-bg: #f1f0ec;
+  --status-error: #dc2626;
+  --status-error-bg: #fee2e2;
+
+  /* Loader accent (brand) */
+  --fn-loader-accent: var(--accent-orange);
+
+  /* Ring + shadows */
+  --ring: var(--accent-orange);
+  --shadow-sm: 0 1px 2px rgba(28, 26, 23, 0.06);
+  --shadow-md: 0 4px 12px rgba(28, 26, 23, 0.08);
+  --shadow-lg: 0 8px 24px rgba(28, 26, 23, 0.1);
+}
+
+.dark {
+  /* Warm dark — a near-black with warm cast, not pure zinc, to keep identity */
+  --background: #17150f;
+  --surface: #201d16;
+  --surface-elevated: #242019;
+  --surface-sunken: #14120d;
+
+  --border: #33302a;
+  --border-subtle: #2a2721;
+
+  --text-primary: #f6f3ec;
+  --text-secondary: #b3ada2;
+  --text-muted: #837d73;
+  --text-inverse: #17150f;
+  --text-link: #f0a463;
+
+  --nav-active: #33302a;
+
+  /* Brand stays consistent; foregrounds keep WCAG contrast */
+  --accent-yellow: #f5ed30;
+  --accent-yellow-fg: #1c1a17;
+  --accent-orange: #fe934e;
+  --accent-orange-fg: #241a10;
+
+  --status-active: #4ade80;
+  --status-active-bg: #14321f;
+  --status-idle: #fbbf24;
+  --status-idle-bg: #3a2c0f;
+  --status-offline: #9ca3af;
+  --status-offline-bg: #26231d;
+  --status-error: #f87171;
+  --status-error-bg: #3a1a1a;
+
+  --fn-loader-accent: var(--accent-orange);
+  --ring: var(--accent-orange);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text-primary);
+  font-family: var(--font-sans), Inter, ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+@keyframes fn-loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

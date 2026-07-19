@@ -1,0 +1,197 @@
+---
+description: Employee time-tracking desktop app (Electron+React), Fastify backend, PostgreSQL/Prisma + MinIO, admin dashboard (Next.js)
+globs:
+  - "**/*.ts"
+  - "**/*.tsx"
+alwaysApply: true
+---
+
+# Project: Internal Time Tracker (Upwork/Hubstaff-style)
+
+## System overview
+- **Desktop app**: Electron + React + TypeScript. Captures screenshots every 15 min,
+  tracks mouse/keyboard activity counts, idle time, session start/stop.
+- **Backend**: Fastify + TypeScript. Issues/verifies its own JWTs, exposes admin/report
+  endpoints, generates presigned screenshot URLs.
+- **Admin dashboard**: Next.js + TypeScript. Shows team activity, hours, screenshots.
+- **Data/Auth/Storage**: PostgreSQL via Prisma (data), backend-issued JWT (auth),
+  MinIO S3-compatible object storage (screenshots) — all self-hosted via Docker.
+
+## Non-negotiable security & privacy rules
+- NEVER log or transmit actual keystrokes or typed content. Only aggregate counts
+  (keyboard_count, mouse_count per minute bucket) for an activity percentage —
+  same approach as Upwork/Hubstaff. Raw keylogging is a legal liability, don't build it.
+- NEVER expose the database (`DATABASE_URL`) or storage (`S3_*`) credentials in
+  Electron or Next.js client code. They are confined to the Fastify backend, and
+  only in server-only files. Clients only ever hold a JWT.
+- Screenshots bucket is PRIVATE. No public URLs. Access only via short-lived
+  presigned URLs generated server-side, and only for users authorized (self or
+  admin of that user's team).
+- Renderer process in Electron must NEVER directly import a network/auth client,
+  native modules (uiohook, desktopCapturer), or fs/net. All of that lives in the
+  main process. Renderer talks to main only via a whitelisted preload contextBridge API.
+- Authorization is enforced in the backend route handlers (there is no DB-level
+  RLS). Any new endpoint must restrict rows to the caller or the caller's team.
+- Validate the JWT on every Fastify route (auth hook) — never trust a user_id
+  passed in a request body for who-owns-this-data checks.
+- Trust server-received timestamps for session/activity records over client
+  timestamps where reconciling billed hours, to reduce time-fraud risk. Client
+  timestamps can be stored alongside for reference but server `received_at` is
+  the source of truth for billing.
+
+## Code conventions
+- TypeScript strict mode everywhere (`strict: true` in tsconfig). No `any` unless
+  justified with a comment.
+- Electron: organize by service (auth, tracker, screenshot, activity, idle, queue,
+  upload) under `electron/services/`. Each service does ONE job. `main.ts` only
+  wires things together — no business logic in main.ts itself.
+- IPC channels are explicitly typed (shared types file between preload and
+  renderer) — no stringly-typed ad hoc channel names without a central enum/const.
+- Fastify: use plugins/routes structure (`routes/`, `plugins/`, `schemas/`).
+  Every route has a JSON schema for request/response validation (Fastify's
+  built-in schema validation, not manual checks).
+- Prefer Zod (or Fastify's native JSON schema) for runtime validation at all
+  network/IPC boundaries — never trust incoming data implicitly, even from your
+  own Electron app.
+- Offline-first for the tracker: activity/screenshot data queues locally
+  (SQLite via better-sqlite3) before upload, and retries on reconnect. Never lose
+  tracked time due to a dropped connection.
+
+## What NOT to build / suggest
+- Don't suggest capturing raw keystroke content, clipboard contents, or webcam/
+  microphone access unless explicitly asked — out of scope and a privacy risk.
+- Don't suggest public/anonymous access patterns for screenshots or activity data.
+- Don't silently add tracking that runs outside of an active clocked-in session
+  (e.g., background tracking when the user hasn't started a session) — always
+  gate tracking behind explicit session start.
+- Don't hardcode database/storage credentials or the JWT secret in source —
+  always via env vars (.env, not committed; use .env.example for reference).
+
+## Preferred libraries
+- Screenshot capture: Electron `desktopCapturer` + `sharp` for compression.
+- Activity/input tracking: `uiohook-napi` (maintained fork; avoid old `iohook`).
+- Idle detection: Electron's built-in `powerMonitor.getSystemIdleTime()`.
+- Local queue/db: `better-sqlite3`.
+- Auto-update: `electron-updater`.
+- Validation: `zod` (Electron/Next.js) and Fastify JSON schema (backend).
+
+## Repository structure (three separate npm projects)
+This project is split into three fully independent repositories, each with its
+own `package.json`, `package-lock.json`, and `node_modules`. There is no
+monorepo, no workspace root, no Turborepo, and no pnpm. Package manager is
+**npm** everywhere.
+
+```
+desktop/     # Electron + React tracker app   (own repo)
+backend/     # Fastify API                     (own repo)
+dashboard/   # Next.js admin dashboard         (own repo)
+```
+
+Rules for working in this structure:
+- Each repo is self-contained: it clones, installs (`npm install`), builds, and
+  deploys on its own with no dependency on the other two.
+- Shared domain shapes (`Session`, `ActivityLog`, `Screenshot`, `Profile`) are
+  defined per repo under `src/types/` (backend/dashboard) or `electron/types/` +
+  `src/renderer/types/` (desktop). Because the repos are independent, these shapes
+  are duplicated intentionally — keep them in sync by hand when the schema changes.
+  Do NOT scatter the same shape across multiple files within a single repo; define
+  it once per repo and import it locally.
+- Database access is confined to the backend via a single Prisma client
+  (`src/lib/prisma.ts`), decorated onto Fastify as `app.prisma`. Storage access
+  goes through the S3-compatible abstraction (`src/lib/storage.ts`, `app.storage`).
+  The desktop and dashboard never connect to the database; they call the backend API.
+- Use plain npm scripts (`dev`, `build`, `lint`, `typecheck`) in each repo's
+  `package.json`. There is no cross-repo build orchestration — you run commands
+  inside the repo you are working on.
+- Never introduce a `pnpm-workspace.yaml`, `turbo.json`, or a root workspace
+  `package.json`. Never commit a `pnpm-lock.yaml` or `yarn.lock` — npm's
+  `package-lock.json` is the only lockfile.
+- Env vars are per-repo (`backend/.env`, `dashboard/.env.local`,
+  `desktop/.env`) — each repo deploys to a different platform with its own
+  secret store. There is no shared root `.env`.
+
+## Deployment targets (per repo, independent deploys)
+- `dashboard` (Next.js) → **Vercel**, repo root is the project root.
+- `backend` (Fastify) → **Railway** or **Render**, always-on Node service, repo
+  root is the build context. Not deployed as serverless functions.
+- `desktop` (Electron) → NOT deployed to a server. Packaged via
+  `electron-builder` into signed installers (.exe/.dmg/.AppImage) and distributed
+  via **GitHub Releases**; `electron-updater` checks GitHub Releases for
+  auto-update. Requires code signing (Apple Developer cert for macOS notarization,
+  a code-signing cert for Windows) — do not ship unsigned builds.
+- PostgreSQL + MinIO run via Docker Compose (`backend/docker-compose.yml`) with
+  persistent named volumes; in production, point `DATABASE_URL` / `S3_*` at your
+  managed or self-hosted instances.
+- CI (GitHub Actions) is per repo: each repo has its own workflow that runs
+  `npm ci && npm run lint && npm run typecheck && npm run build`. There is no
+  cross-repo pipeline or shared remote cache.
+
+## Desktop app renderer stack (Vite + Tailwind + shadcn/ui)
+- Bundler: `electron-vite` (or `vite-plugin-electron`) — not webpack/CRA. Gives
+  fast HMR for the renderer and a straightforward PostCSS/Tailwind pipeline.
+- Styling: Tailwind CSS + shadcn/ui for all renderer UI. Keep it minimal —
+  this is a small utility UI (login, session status, pause/resume, tray popover),
+  not a marketing site. Prefer shadcn defaults over custom CSS unless there's a
+  clear reason.
+- shadcn components are copied into `desktop/src/renderer/components/ui`
+  (not an npm dependency) — treat them as owned code, safe to tweak directly.
+- Path aliases (`@/components`, `@/lib`, etc.) must be kept in sync between
+  `tsconfig.json` and `vite.config.ts` (`resolve.alias`) in `desktop` —
+  a mismatch here is the most common shadcn setup failure.
+- Tailwind/shadcn apply ONLY to the renderer process. Never reference them or
+  DOM/CSS concepts from `electron/main.ts` or any `electron/services/*` file —
+  those run in Node context, not a browser context.
+- Window chrome: default to the native OS frame for simplicity unless a fully
+  custom title bar is explicitly requested. If custom chrome is needed, use
+  `frame: false` on `BrowserWindow` and `-webkit-app-region: drag` on a header
+  element — implement this in `desktop` renderer only.
+
+## Design references
+
+**Admin dashboard (`dashboard`)** — style after clean SaaS admin panels
+(reference: Cliensy, Tracklog, Shippera style dashboards):
+- Left sidebar nav (workspace switcher on top, grouped nav items with icons,
+  settings/help pinned at bottom).
+- Top bar: search, quick actions, notification bell, user avatar menu.
+- Card-based stat tiles (rounded corners, soft shadows, generous whitespace)
+  for summary metrics — e.g. hours tracked today, active team members,
+  productive vs idle time, apps/sites used.
+- Data tables with avatar + name columns, colored status pills (rounded,
+  small, semantic colors — e.g. green for "Done/Active", yellow for
+  "In-Progress", gray/blue for "To-Do"), sortable/filterable headers.
+- A timeline/bar chart component for daily activity breakdown (productive vs
+  focused vs idle time by hour) is a good fit on the dashboard's overview page.
+- Keep it minimal and functional — this is an internal tool, not a marketing
+  product. Prioritize clarity and scan-ability over decoration.
+
+**Color palette** — primary accent colors for the dashboard UI:
+- `#F5ED30` (yellow) and `#FE934E` (orange) — use as accent/highlight colors
+  (buttons, active states, chart highlights, badges) against a neutral
+  white/light-gray base (`#FFFFFF`, `#F8F9FA`-ish neutrals) and dark text.
+  Do NOT make these the dominant background colors — use them as accents on
+  an otherwise neutral, minimal UI, consistent with the reference dashboards.
+- Add both as CSS variables / Tailwind theme extensions in
+  `dashboard/tailwind.config.js` (and desktop's, if the desktop UI reuses
+  the same accent) rather than hardcoding hex values inline.
+
+**Desktop tracker app (`desktop`)** — style after Upwork Desktop
+Tracker / Clockify's tracker window, NOT a full dashboard:
+- Small, single-purpose window (roughly 300–400px wide). No sidebar, no
+  multi-page navigation.
+- Core elements only: current project/task selector (if applicable), a
+  start/stop timer button, elapsed time display, and a compact today's-hours
+  summary. Optionally a mini activity/idle indicator.
+- No extraneous settings, charts, or decoration in the tracker window itself —
+  keep configuration/reports in the web dashboard, not the desktop app.
+- Reuse the shared shadcn/Tailwind setup and the `#F5ED30`/`#FE934E` accents
+  sparingly (e.g. the start/stop button or active-session indicator), keeping
+  the rest neutral (white/gray/dark text) for a minimal, non-distracting feel
+  since this app sits in the background/tray most of the day.
+
+## When generating code in this repo
+- Always ask which process (main vs renderer) a snippet belongs to if ambiguous,
+  and default to putting sensitive logic in main process / backend, never renderer.
+- When adding a new Prisma model, update `prisma/schema.prisma`, create a
+  migration, and add the matching ownership/role checks in the routes that use it.
+- When adding a new Fastify route touching user data, always include the JWT/
+  ownership check as part of the route, not as a follow-up.
